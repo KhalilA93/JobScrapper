@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="4" fill="#2196F3"/>
+  <g fill="white" transform="translate(4, 4)">
+    <!-- Job/Work icon -->
+    <rect x="5.333333333333333" y="8" width="16" height="10.666666666666666" rx="2" fill="white" opacity="0.9"/>
+    <rect x="8" y="10.666666666666666" width="10.666666666666666" height="2" fill="#2196F3"/>
+    <rect x="8" y="12.8" width="8" height="2" fill="#2196F3"/>
+    <rect x="8" y="16" width="10.666666666666666" height="2" fill="#2196F3"/>
+    <!-- Robot/Automation indicator -->
+    <circle cx="24" cy="8" r="2.6666666666666665" fill="white"/>
+    <rect x="22.4" y="9.6" width="3.2" height="2.1333333333333333" fill="white"/>
+  </g>
+</svg>
