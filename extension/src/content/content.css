@@ -1,0 +1,89 @@
+/* Content script styles */
+.jobscrapper-overlay {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 10000;
+  background: #fff;
+  border: 2px solid #2196f3;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  max-width: 300px;
+}
+
+.jobscrapper-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.jobscrapper-status-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #4caf50;
+}
+
+.jobscrapper-status-icon.inactive {
+  background: #f44336;
+}
+
+.jobscrapper-status-icon.processing {
+  background: #ff9800;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.jobscrapper-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.jobscrapper-btn {
+  padding: 6px 12px;
+  border: 1px solid #2196f3;
+  background: #2196f3;
+  color: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.jobscrapper-btn:hover {
+  background: #1976d2;
+}
+
+.jobscrapper-btn.secondary {
+  background: white;
+  color: #2196f3;
+}
+
+.jobscrapper-btn.secondary:hover {
+  background: #f5f5f5;
+}
+
+.jobscrapper-form-highlight {
+  outline: 2px solid #2196f3 !important;
+  outline-offset: 2px;
+  animation: highlight 0.3s ease-in-out;
+}
+
+@keyframes highlight {
+  from { outline-color: transparent; }
+  to { outline-color: #2196f3; }
+}
+
+.jobscrapper-filled {
+  background-color: #e8f5e8 !important;
+  border-color: #4caf50 !important;
+}

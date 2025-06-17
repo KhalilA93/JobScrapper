@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>JobScrapper</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <img src="icons/icon32.png" alt="JobScrapper" class="logo">
+      <h1>JobScrapper</h1>
+    </header>
+
+    <main class="popup-main">
+      <div class="status-section">
+        <div class="status-indicator" id="statusIndicator">
+          <span class="status-dot"></span>
+          <span class="status-text" id="statusText">Ready</span>
+        </div>
+        <div class="platform-info" id="platformInfo">
+          Platform: <span id="currentPlatform">None detected</span>
+        </div>
+      </div>
+
+      <div class="stats-section">
+        <div class="stat-item">
+          <span class="stat-label">Jobs Found</span>
+          <span class="stat-value" id="jobsFound">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Applications</span>
+          <span class="stat-value" id="applicationsCount">0</span>
+        </div>
+      </div>
+
+      <div class="controls-section">
+        <button id="scrapeButton" class="btn primary">
+          <span class="btn-icon">🔍</span>
+          Scan Jobs
+        </button>
+        
+        <button id="autoApplyButton" class="btn secondary">
+          <span class="btn-icon">⚡</span>
+          Auto Apply
+        </button>
+        
+        <button id="settingsButton" class="btn tertiary">
+          <span class="btn-icon">⚙️</span>
+          Settings
+        </button>
+      </div>
+
+      <div class="quick-settings">
+        <label class="checkbox-label">
+          <input type="checkbox" id="autoApplyEnabled">
+          <span class="checkmark"></span>
+          Enable Auto Apply
+        </label>
+        
+        <div class="setting-row">
+          <label for="dailyLimit">Daily Limit:</label>
+          <input type="number" id="dailyLimit" min="1" max="50" value="5">
+        </div>
+      </div>
+    </main>
+
+    <footer class="popup-footer">
+      <a href="#" id="dashboardLink" class="footer-link">Open Dashboard</a>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
