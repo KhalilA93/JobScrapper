@@ -1,88 +1,115 @@
 const mongoose = require('mongoose');
 
-const ApplicationSchema = new mongoose.Schema({
-  // Job reference
-  jobId: {
-    type: String,
-    required: true
+const applicationSchema = new mongoose.Schema({
+  // References
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true,
+    index: true
   },
   job: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Job'
-  },
-  
-  // Basic application info
-  jobTitle: {
-    type: String,
-    required: true
-  },
-  company: {
-    type: String,
-    required: true
-  },
-  location: String,
-  platform: {
-    type: String,
+    ref: 'Job',
     required: true,
-    enum: ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter', 'monster']
+    index: true
   },
   
-  // Application details
+  // Basic application information
+  jobDetails: {
+    title: { type: String, required: true },
+    company: { type: String, required: true },
+    platform: {
+      type: String,
+      required: true,
+      enum: ['linkedin', 'indeed', 'glassdoor', 'google', 'ziprecruiter', 'monster', 'wellfound', 'dice']
+    },
+    location: String,
+    jobId: String, // Original platform job ID
+    originalUrl: String
+  },
+  
+  // Application status and timeline
   status: {
     type: String,
-    enum: ['applied', 'pending', 'reviewed', 'interview', 'rejected', 'offered', 'accepted'],
-    default: 'applied'
-  },
-  appliedAt: {
-    type: Date,
-    default: Date.now
+    enum: [
+      'pending',      // About to apply
+      'applied',      // Successfully submitted
+      'viewed',       // Employer viewed application
+      'screening',    // Initial screening
+      'interview',    // Interview scheduled/completed
+      'assessment',   // Technical/skill assessment
+      'offer',        // Job offer received
+      'accepted',     // Offer accepted
+      'rejected',     // Application rejected
+      'withdrawn',    // Candidate withdrew
+      'expired'       // Application expired
+    ],
+    default: 'pending'
   },
   
-  // Application method
+  // Application method and automation
   applicationMethod: {
     type: String,
-    enum: ['easy_apply', 'form_submission', 'external_link', 'email'],
+    enum: ['easy_apply', 'external_form', 'email', 'company_website', 'manual'],
     default: 'easy_apply'
   },
+  isAutomated: { type: Boolean, default: true },
   
-  // Form data used
-  applicationData: {
-    name: String,
-    email: String,
-    phone: String,
-    resumeUrl: String,
-    coverLetter: String,
-    customAnswers: [{
-      question: String,
-      answer: String
+  // Timing information
+  submittedAt: Date,
+  processingTime: { type: Number, default: 0 }, // milliseconds
+  
+  // Application data submitted
+  submittedData: {
+    personalInfo: {
+      firstName: String,
+      lastName: String,
+      email: String,
+      phone: String
+    },
+    documents: {
+      resumeUrl: String,
+      coverLetterUrl: String,
+      portfolioUrl: String,
+      additionalDocs: [String]
+    },
+    responses: [{
+      question: { type: String, required: true },
+      answer: { type: String, required: true },
+      fieldType: {
+        type: String,
+        enum: ['text', 'textarea', 'select', 'checkbox', 'file', 'date']
+      }
     }]
   },
   
-  // Tracking information
-  automatedApplication: {
-    type: Boolean,
-    default: true
-  },
-  processingTime: {
-    type: Number, // in milliseconds
-    default: 0
-  },
-  
-  // Response tracking
-  responses: [{
+  // Communication tracking
+  communications: [{
     type: {
       type: String,
-      enum: ['email', 'platform_message', 'phone_call', 'interview_request']
+      enum: ['email', 'phone', 'message', 'interview_request', 'assessment_invite', 'offer', 'rejection'],
+      required: true
     },
+    direction: {
+      type: String,
+      enum: ['inbound', 'outbound'],
+      required: true
+    },
+    subject: String,
     content: String,
+    sender: String,
+    recipient: String,
     receivedAt: {
       type: Date,
       default: Date.now
     },
-    source: String, // email address, platform, etc.
-    isRead: {
-      type: Boolean,
-      default: false
+    isRead: { type: Boolean, default: false },
+    attachments: [String],
+    metadata: {
+      platform: String,
+      messageId: String,
+      threadId: String
     }
   }],
   
@@ -90,66 +117,104 @@ const ApplicationSchema = new mongoose.Schema({
   interviews: [{
     type: {
       type: String,
-      enum: ['phone', 'video', 'in_person', 'technical', 'behavioral']
+      enum: ['phone', 'video', 'in_person', 'technical', 'behavioral', 'panel', 'final'],
+      required: true
+    },
+    stage: {
+      type: String,
+      enum: ['initial', 'technical', 'cultural', 'final', 'follow_up']
     },
     scheduledAt: Date,
-    duration: Number, // in minutes
-    interviewer: String,
-    notes: String,
+    duration: Number, // minutes
+    location: String, // physical address or video link
+    interviewers: [{
+      name: String,
+      role: String,
+      email: String
+    }],
+    status: {
+      type: String,
+      enum: ['scheduled', 'completed', 'cancelled', 'rescheduled', 'no_show'],
+      default: 'scheduled'
+    },
+    feedback: {
+      rating: { type: Number, min: 1, max: 5 },
+      notes: String,
+      strengths: [String],
+      improvements: [String]
+    },
     outcome: {
       type: String,
       enum: ['pending', 'passed', 'failed', 'cancelled']
-    }
+    },
+    followUpRequired: { type: Boolean, default: false }
   }],
   
-  // Notes and follow-ups
-  notes: [{
-    content: String,
-    createdAt: {
-      type: Date,
-      default: Date.now
+  // Offer details
+  offer: {
+    salary: {
+      amount: Number,
+      currency: { type: String, default: 'USD' },
+      period: { type: String, enum: ['hourly', 'monthly', 'yearly'] }
     },
+    benefits: [String],
+    startDate: Date,
+    equity: String,
+    bonus: Number,
+    vacationDays: Number,
+    workArrangement: {
+      type: String,
+      enum: ['remote', 'hybrid', 'on-site']
+    },
+    negotiable: { type: Boolean, default: true },
+    deadline: Date,
+    terms: String
+  },
+  
+  // Notes and tracking
+  notes: [{
+    content: { type: String, required: true },
     type: {
       type: String,
-      enum: ['general', 'follow_up', 'interview_prep', 'feedback'],
+      enum: ['general', 'follow_up', 'interview_prep', 'research', 'feedback', 'reminder'],
       default: 'general'
-    }
+    },
+    isPrivate: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now },
+    tags: [String]
   }],
   
-  // Metadata
-  tags: [{
-    type: String,
-    trim: true
-  }],
-  priority: {
-    type: String,
-    enum: ['low', 'medium', 'high'],
-    default: 'medium'
+  // Metrics and analysis
+  metrics: {
+    matchScore: { type: Number, min: 0, max: 100 },
+    priority: {
+      type: String,
+      enum: ['low', 'medium', 'high', 'urgent'],
+      default: 'medium'
+    },
+    confidenceLevel: { type: Number, min: 0, max: 100 }, // How confident about getting this job
+    responseTime: Number, // Time between application and first response (hours)
+    timeToHire: Number, // Total time from application to offer (days)
+    interviewCount: { type: Number, default: 0 },
+    rejectionReason: String
   },
   
   // Error tracking
   errors: [{
-    message: String,
-    occurredAt: {
-      type: Date,
-      default: Date.now
-    },
-    step: String, // which step failed
-    resolved: {
-      type: Boolean,
-      default: false
-    }
+    step: String, // Which step failed (scraping, form-filling, submission)
+    message: { type: String, required: true },
+    errorCode: String,
+    occurredAt: { type: Date, default: Date.now },
+    resolved: { type: Boolean, default: false },
+    resolution: String,
+    retryCount: { type: Number, default: 0 }
   }],
   
-  // Success metrics
-  matchScore: Number,
-  expectedSalary: {
-    min: Number,
-    max: Number,
-    currency: {
-      type: String,
-      default: 'USD'
-    }
+  // Tags and categorization
+  tags: [String],
+  category: {
+    type: String,
+    enum: ['target', 'backup', 'practice', 'reach', 'safety']
   }
 }, {
   timestamps: true,
@@ -157,147 +222,305 @@ const ApplicationSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-ApplicationSchema.index({ jobId: 1 });
-ApplicationSchema.index({ platform: 1 });
-ApplicationSchema.index({ status: 1 });
-ApplicationSchema.index({ appliedAt: -1 });
-ApplicationSchema.index({ company: 1 });
-ApplicationSchema.index({ automatedApplication: 1 });
+// Compound indexes for better performance
+applicationSchema.index({ user: 1, status: 1 });
+applicationSchema.index({ job: 1, user: 1 }, { unique: true }); // Prevent duplicate applications
+applicationSchema.index({ 'jobDetails.platform': 1, status: 1 });
+applicationSchema.index({ submittedAt: -1 });
+applicationSchema.index({ 'metrics.priority': 1, status: 1 });
+applicationSchema.index({ tags: 1 });
+applicationSchema.index({ category: 1 });
 
-// Virtual for days since application
-ApplicationSchema.virtual('daysSinceApplication').get(function() {
-  const diffTime = Math.abs(new Date() - this.appliedAt);
+// Performance indexes
+applicationSchema.index({ 'jobDetails.company': 1 });
+applicationSchema.index({ 'metrics.matchScore': -1 });
+applicationSchema.index({ createdAt: -1 });
+
+// Virtuals
+applicationSchema.virtual('daysSinceApplication').get(function() {
+  if (!this.submittedAt) return null;
+  const diffTime = Math.abs(new Date() - this.submittedAt);
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 });
 
-// Virtual for response count
-ApplicationSchema.virtual('responseCount').get(function() {
-  return this.responses ? this.responses.length : 0;
+applicationSchema.virtual('responseCount').get(function() {
+  return this.communications ? this.communications.length : 0;
 });
 
-// Virtual for unread responses
-ApplicationSchema.virtual('unreadResponses').get(function() {
-  return this.responses ? this.responses.filter(r => !r.isRead).length : 0;
+applicationSchema.virtual('unreadCount').get(function() {
+  return this.communications ? 
+    this.communications.filter(comm => !comm.isRead && comm.direction === 'inbound').length : 0;
+});
+
+applicationSchema.virtual('activeInterviews').get(function() {
+  return this.interviews ? 
+    this.interviews.filter(interview => ['scheduled', 'rescheduled'].includes(interview.status)).length : 0;
+});
+
+applicationSchema.virtual('isActive').get(function() {
+  return !['rejected', 'withdrawn', 'expired', 'accepted'].includes(this.status);
+});
+
+applicationSchema.virtual('timeToResponse').get(function() {
+  if (!this.submittedAt || !this.communications.length) return null;
+  
+  const firstResponse = this.communications
+    .filter(comm => comm.direction === 'inbound')
+    .sort((a, b) => a.receivedAt - b.receivedAt)[0];
+  
+  if (!firstResponse) return null;
+  
+  const diffHours = Math.abs(firstResponse.receivedAt - this.submittedAt) / (1000 * 60 * 60);
+  return Math.round(diffHours);
 });
 
 // Pre-save middleware
-ApplicationSchema.pre('save', function(next) {
-  // Auto-populate job reference if jobId is provided
-  if (this.jobId && !this.job) {
-    const Job = mongoose.model('Job');
-    Job.findOne({ jobId: this.jobId })
-      .then(job => {
-        if (job) {
-          this.job = job._id;
-        }
-        next();
-      })
-      .catch(next);
-  } else {
-    next();
+applicationSchema.pre('save', function(next) {
+  // Update metrics based on current state
+  this.metrics.interviewCount = this.interviews ? this.interviews.length : 0;
+  
+  // Auto-calculate response time if not set
+  if (!this.metrics.responseTime && this.timeToResponse) {
+    this.metrics.responseTime = this.timeToResponse;
   }
+  
+  // Update status based on interviews or offers
+  if (this.offer && Object.keys(this.offer).length > 0 && this.status === 'interview') {
+    this.status = 'offer';
+  }
+  
+  next();
 });
 
 // Static methods
-ApplicationSchema.statics.findByStatus = function(status) {
-  return this.find({ status }).sort({ appliedAt: -1 });
+applicationSchema.statics.findByStatus = function(status, userId) {
+  const query = { status };
+  if (userId) query.user = userId;
+  
+  return this.find(query)
+    .populate('job', 'title company platform')
+    .sort({ submittedAt: -1 });
 };
 
-ApplicationSchema.statics.findRecent = function(days = 7) {
-  const since = new Date();
-  since.setDate(since.getDate() - days);
-  return this.find({ 
-    appliedAt: { $gte: since }
-  }).sort({ appliedAt: -1 });
+applicationSchema.statics.findByPlatform = function(platform, userId) {
+  const query = { 'jobDetails.platform': platform };
+  if (userId) query.user = userId;
+  
+  return this.find(query)
+    .populate('job', 'title company')
+    .sort({ submittedAt: -1 });
 };
 
-ApplicationSchema.statics.findByPlatform = function(platform) {
-  return this.find({ platform }).sort({ appliedAt: -1 });
-};
-
-ApplicationSchema.statics.getStats = function() {
-  return this.aggregate([
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-};
-
-ApplicationSchema.statics.getApplicationsByDate = function(days = 30) {
+applicationSchema.statics.findRecent = function(days = 7, userId) {
   const since = new Date();
   since.setDate(since.getDate() - days);
   
-  return this.aggregate([
+  const query = { submittedAt: { $gte: since } };
+  if (userId) query.user = userId;
+  
+  return this.find(query)
+    .populate('job', 'title company platform')
+    .sort({ submittedAt: -1 });
+};
+
+applicationSchema.statics.getStatusStats = function(userId) {
+  const pipeline = [
+    ...(userId ? [{ $match: { user: mongoose.Types.ObjectId(userId) } }] : []),
+    {
+      $group: {
+        _id: '$status',
+        count: { $sum: 1 },
+        avgMatchScore: { $avg: '$metrics.matchScore' },
+        avgResponseTime: { $avg: '$metrics.responseTime' }
+      }
+    },
+    { $sort: { count: -1 } }
+  ];
+  
+  return this.aggregate(pipeline);
+};
+
+applicationSchema.statics.getPlatformStats = function(userId) {
+  const pipeline = [
+    ...(userId ? [{ $match: { user: mongoose.Types.ObjectId(userId) } }] : []),
+    {
+      $group: {
+        _id: '$jobDetails.platform',
+        total: { $sum: 1 },
+        successful: {
+          $sum: {
+            $cond: [
+              { $in: ['$status', ['offer', 'accepted', 'interview']] },
+              1,
+              0
+            ]
+          }
+        },
+        avgMatchScore: { $avg: '$metrics.matchScore' }
+      }
+    },
+    {
+      $addFields: {
+        successRate: {
+          $multiply: [
+            { $divide: ['$successful', '$total'] },
+            100
+          ]
+        }
+      }
+    },
+    { $sort: { total: -1 } }
+  ];
+  
+  return this.aggregate(pipeline);
+};
+
+applicationSchema.statics.getApplicationTrends = function(days = 30, userId) {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  
+  const pipeline = [
     {
       $match: {
-        appliedAt: { $gte: since }
+        submittedAt: { $gte: since },
+        ...(userId && { user: mongoose.Types.ObjectId(userId) })
       }
     },
     {
       $group: {
         _id: {
-          year: { $year: '$appliedAt' },
-          month: { $month: '$appliedAt' },
-          day: { $dayOfMonth: '$appliedAt' }
+          year: { $year: '$submittedAt' },
+          month: { $month: '$submittedAt' },
+          day: { $dayOfMonth: '$submittedAt' }
         },
-        count: { $sum: 1 }
+        applications: { $sum: 1 },
+        interviews: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'interview'] }, 1, 0]
+          }
+        },
+        offers: {
+          $sum: {
+            $cond: [{ $eq: ['$status', 'offer'] }, 1, 0]
+          }
+        }
       }
     },
-    {
-      $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 }
-    }
-  ]);
+    { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1 } }
+  ];
+  
+  return this.aggregate(pipeline);
 };
 
 // Instance methods
-ApplicationSchema.methods.addResponse = function(responseData) {
-  this.responses.push(responseData);
+applicationSchema.methods.addCommunication = function(commData) {
+  this.communications.push(commData);
   
-  // Update status based on response type
-  if (responseData.type === 'interview_request') {
+  // Auto-update status based on communication type
+  if (commData.type === 'interview_request' && this.status === 'applied') {
     this.status = 'interview';
-  } else if (this.status === 'applied') {
-    this.status = 'reviewed';
+  } else if (commData.type === 'offer' && ['applied', 'interview'].includes(this.status)) {
+    this.status = 'offer';
+  } else if (commData.type === 'rejection') {
+    this.status = 'rejected';
+  } else if (this.status === 'applied' && commData.direction === 'inbound') {
+    this.status = 'viewed';
   }
   
   return this.save();
 };
 
-ApplicationSchema.methods.addInterview = function(interviewData) {
-  this.interviews.push(interviewData);
-  this.status = 'interview';
-  return this.save();
-};
-
-ApplicationSchema.methods.addNote = function(noteContent, noteType = 'general') {
-  this.notes.push({
-    content: noteContent,
-    type: noteType
+applicationSchema.methods.scheduleInterview = function(interviewData) {
+  this.interviews.push({
+    ...interviewData,
+    status: 'scheduled'
   });
+  
+  if (this.status !== 'interview') {
+    this.status = 'interview';
+  }
+  
   return this.save();
 };
 
-ApplicationSchema.methods.updateStatus = function(newStatus) {
+applicationSchema.methods.addNote = function(content, type = 'general', tags = []) {
+  this.notes.push({
+    content,
+    type,
+    tags,
+    createdAt: new Date()
+  });
+  
+  return this.save();
+};
+
+applicationSchema.methods.updateStatus = function(newStatus, note = null) {
+  const oldStatus = this.status;
   this.status = newStatus;
   
   // Add automatic note for status changes
+  const statusNote = `Status changed from ${oldStatus} to ${newStatus}`;
   this.notes.push({
-    content: `Status changed to: ${newStatus}`,
-    type: 'general'
+    content: note || statusNote,
+    type: 'general',
+    createdAt: new Date()
   });
   
   return this.save();
 };
 
-ApplicationSchema.methods.markResponsesAsRead = function() {
-  this.responses.forEach(response => {
-    response.isRead = true;
+applicationSchema.methods.markCommunicationsAsRead = function() {
+  this.communications.forEach(comm => {
+    if (comm.direction === 'inbound') {
+      comm.isRead = true;
+    }
   });
+  
   return this.save();
 };
 
-module.exports = mongoose.model('Application', ApplicationSchema);
+applicationSchema.methods.recordError = function(step, message, errorCode = null) {
+  this.errors.push({
+    step,
+    message,
+    errorCode,
+    occurredAt: new Date()
+  });
+  
+  return this.save();
+};
+
+applicationSchema.methods.calculateSuccessScore = function() {
+  let score = 0;
+  
+  // Base score by status
+  const statusScores = {
+    'rejected': 0,
+    'withdrawn': 0,
+    'expired': 0,
+    'pending': 10,
+    'applied': 20,
+    'viewed': 30,
+    'screening': 40,
+    'interview': 60,
+    'assessment': 70,
+    'offer': 90,
+    'accepted': 100
+  };
+  
+  score += statusScores[this.status] || 0;
+  
+  // Bonus for quick responses
+  if (this.metrics.responseTime && this.metrics.responseTime < 24) {
+    score += 10;
+  }
+  
+  // Match score contribution
+  if (this.metrics.matchScore) {
+    score += Math.round(this.metrics.matchScore * 0.1);
+  }
+  
+  return Math.min(100, score);
+};
+
+module.exports = mongoose.model('Application', applicationSchema);
