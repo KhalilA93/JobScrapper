@@ -6,7 +6,7 @@ module.exports = {
   entry: {
     background: './src/background/index.js',
     content: './src/content/index.js',
-    popup: './src/popup/index.js'
+    popup: './src/popup/index.jsx' // Updated to JSX entry point
   },
   output: {
     path: path.resolve(__dirname, 'dist'),
@@ -16,12 +16,17 @@ module.exports = {
   module: {
     rules: [
       {
-        test: /\.js$/,
+        test: /\.(js|jsx)$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
           options: {
-            presets: ['@babel/preset-env']
+            presets: [
+              '@babel/preset-env',
+              ['@babel/preset-react', {
+                runtime: 'automatic' // Use new JSX transform
+              }]
+            ]
           }
         }
       },
@@ -39,12 +44,13 @@ module.exports = {
       patterns: [
         { from: 'manifest.json', to: 'manifest.json' },
         { from: 'src/popup/popup.html', to: 'popup.html' },
+        { from: 'src/popup/PopupStyles.css', to: 'PopupStyles.css' },
         { from: 'icons', to: 'icons' }
       ]
     })
   ],
   resolve: {
-    extensions: ['.js'],
+    extensions: ['.js', '.jsx'], // Added .jsx extension
     alias: {
       '@': path.resolve(__dirname, 'src'),
       '@utils': path.resolve(__dirname, 'src/utils'),
@@ -54,6 +60,7 @@ module.exports = {
     }
   },
   optimization: {
-    minimize: true
-  }
+    minimize: false // Disable for debugging
+  },
+  devtool: 'inline-source-map' // Enable source maps for debugging
 };
