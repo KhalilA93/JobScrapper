@@ -1038,3 +1038,290 @@ input[type="checkbox"] {
     box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.1);
   }
 }
+
+/* ============================================================================
+   NOTIFICATION SETTINGS STYLES
+   ============================================================================ */
+
+.notification-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.notification-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.notification-settings-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.saving-indicator {
+  font-size: 12px;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.notification-settings-loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+/* Permission Prompt */
+.notification-permission-prompt {
+  text-align: center;
+  padding: 30px 20px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.permission-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.notification-permission-prompt h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.notification-permission-prompt p {
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.permission-benefits {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+  text-align: left;
+}
+
+.benefit-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.benefit-icon {
+  font-size: 16px;
+  min-width: 20px;
+}
+
+/* Settings Tabs */
+.settings-tabs {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 8px;
+  padding: 4px;
+  margin-bottom: 20px;
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.settings-tab:hover {
+  color: #475569;
+}
+
+.settings-tab.active {
+  background: #3b82f6;
+  color: white;
+}
+
+.settings-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Notification Sections */
+.notification-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Quiet Hours Configuration */
+.quiet-hours-config {
+  margin-left: 24px;
+  margin-top: 12px;
+  padding: 12px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.time-range {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.time-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.time-input label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.time-input input {
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+/* Number Inputs */
+.number-input {
+  width: 80px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-left: 24px;
+}
+
+/* Test Buttons */
+.test-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* Notification Status Indicators */
+.notification-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  background: #f0f9ff;
+  border-radius: 8px;
+  border: 1px solid #bae6fd;
+  margin-bottom: 16px;
+}
+
+.notification-status.enabled {
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.notification-status.disabled {
+  background: #fef2f2;
+  border-color: #fecaca;
+}
+
+.status-icon {
+  font-size: 16px;
+}
+
+.status-text {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+/* Notification Preview */
+.notification-preview {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e2e8f0;
+  margin-top: 12px;
+}
+
+.preview-notification {
+  background: #ffffff;
+  border-radius: 6px;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.preview-title {
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.preview-message {
+  color: #64748b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* Dark Mode Notification Styles */
+@media (prefers-color-scheme: dark) {
+  .notification-permission-prompt {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .benefit-item {
+    background: #1a202c;
+    border-color: #4a5568;
+  }
+  
+  .settings-tabs {
+    background: #2d3748;
+  }
+  
+  .settings-tab {
+    color: #a0aec0;
+  }
+  
+  .settings-tab:hover {
+    color: #e2e8f0;
+  }
+  
+  .settings-tab.active {
+    background: #60a5fa;
+  }
+  
+  .quiet-hours-config {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .notification-preview {
+    background: #2d3748;
+    border-color: #4a5568;
+  }
+  
+  .preview-notification {
+    background: #1a202c;
+    border-color: #4a5568;
+  }
+}

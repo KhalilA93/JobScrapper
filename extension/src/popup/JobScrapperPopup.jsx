@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { MessageHelper, MessageTypes } from '../utils/messageProtocol.js';
+import NotificationSettings from './NotificationSettings.jsx';
 
 // ============================================================================
 // MAIN POPUP COMPONENT
@@ -592,6 +593,7 @@ const PreferencesSection = ({ data, isEditing, onChange }) => (
 const SettingsPanel = () => {
   const [settings, setSettings] = useState({});
   const [saving, setSaving] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('general');
 
   useEffect(() => {
     loadSettings();
@@ -623,23 +625,62 @@ const SettingsPanel = () => {
     }
   };
 
+  const renderSettingsContent = () => {
+    switch (activeSettingsTab) {
+      case 'general':
+        return (
+          <>
+            <GeneralSettings settings={settings} onChange={updateSetting} />
+            <PlatformSettings settings={settings} onChange={updateSetting} />
+          </>
+        );
+      case 'notifications':
+        return <NotificationSettings />;
+      case 'advanced':
+        return <AdvancedSettings settings={settings} onChange={updateSetting} />;
+      default:
+        return <GeneralSettings settings={settings} onChange={updateSetting} />;
+    }
+  };
+
   return (
     <div className="settings-panel">
       <div className="settings-header">
         <h3>Settings</h3>
-        <button 
-          className="btn-primary"
-          onClick={saveSettings}
-          disabled={saving}
+        {activeSettingsTab !== 'notifications' && (
+          <button 
+            className="btn-primary"
+            onClick={saveSettings}
+            disabled={saving}
+          >
+            {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        )}
+      </div>
+
+      <div className="settings-tabs">
+        <button
+          className={`settings-tab ${activeSettingsTab === 'general' ? 'active' : ''}`}
+          onClick={() => setActiveSettingsTab('general')}
         >
-          {saving ? 'Saving...' : 'Save Settings'}
+          General
+        </button>
+        <button
+          className={`settings-tab ${activeSettingsTab === 'notifications' ? 'active' : ''}`}
+          onClick={() => setActiveSettingsTab('notifications')}
+        >
+          Notifications
+        </button>
+        <button
+          className={`settings-tab ${activeSettingsTab === 'advanced' ? 'active' : ''}`}
+          onClick={() => setActiveSettingsTab('advanced')}
+        >
+          Advanced
         </button>
       </div>
 
-      <div className="settings-sections">
-        <GeneralSettings settings={settings} onChange={updateSetting} />
-        <PlatformSettings settings={settings} onChange={updateSetting} />
-        <AdvancedSettings settings={settings} onChange={updateSetting} />
+      <div className="settings-content">
+        {renderSettingsContent()}
       </div>
     </div>
   );

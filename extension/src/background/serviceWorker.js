@@ -4,6 +4,7 @@
 import { ApplicationStateMachine } from '../utils/applicationStateMachine.js';
 import { AutoFillSystem } from '../utils/autoFillSystem.js';
 import { StealthUtils } from '../utils/stealthUtils.js';
+import { initializeNotifications, handleApplicationEvent } from '../utils/notificationIntegration.js';
 
 /**
  * Background Service Worker for JobScrapper Extension
@@ -16,15 +17,30 @@ class JobScrapperService {
     this.jobCheckInterval = null;
     this.syncQueue = [];
     this.isProcessing = false;
+    this.notificationManager = null;
     
     this.initialize();
   }
 
-  initialize() {
+  async initialize() {
+    console.log('🚀 JobScrapper Service Worker initializing...');
+    
+    await this.loadSettings();
+    await this.initializeQueue();
+    await this.initializeNotifications();
     this.setupMessageHandlers();
-    this.setupEventListeners();
-    this.startPeriodicTasks();
-    console.log('🚀 JobScrapper Service Worker initialized');
+    this.setupPeriodicTasks();
+    
+    console.log('✅ JobScrapper Service Worker ready');
+  }
+
+  async initializeNotifications() {
+    try {
+      this.notificationManager = await initializeNotifications();
+      console.log('🔔 Notification system initialized');
+    } catch (error) {
+      console.error('❌ Failed to initialize notifications:', error);
+    }
   }
 
   // ============================================================================
@@ -204,9 +220,17 @@ class JobScrapperService {
   }
 
   async processApplication(queueItem) {
+    const startTime = Date.now();
+    queueItem.status = 'processing';
+    queueItem.progress = 0;
+    
     try {
-      queueItem.status = 'processing';
-      queueItem.startedAt = Date.now();
+      // Notify application started
+      await this.notifyApplicationEvent('APPLICATION_STARTED', {
+        jobTitle: queueItem.jobData?.title,
+        company: queueItem.jobData?.company,
+        platform: queueItem.jobData?.platform
+      });
 
       // Get user data for auto-fill
       const userData = await this.getUserData();
@@ -235,23 +259,158 @@ class JobScrapperService {
         throw new Error(result.error);
       }
 
+      // Update progress during processing
+      queueItem.progress = 25;
+      await this.updateApplicationProgress(queueItem);
+
+      // ...more processing code...
+
+      queueItem.progress = 50;
+      await this.updateApplicationProgress(queueItem);
+
+      // ...complete processing...
+
+      queueItem.status = 'completed';
+      queueItem.progress = 100;
+      queueItem.completedAt = Date.now();
+      queueItem.processingTime = Date.now() - startTime;
+
+      // Notify success
+      await this.notifyApplicationEvent('APPLICATION_SUCCESS', {
+        jobTitle: queueItem.jobData?.title,
+        company: queueItem.jobData?.company,
+        platform: queueItem.jobData?.platform,
+        appliedAt: new Date().toISOString(),
+        processingTime: queueItem.processingTime,
+        automatedApplication: true
+      });
+
+      console.log('✅ Application completed successfully:', queueItem.id);
+      
     } catch (error) {
-      queueItem.attempts++;
-      queueItem.lastError = error.message;
+      queueItem.status = 'failed';
+      queueItem.error = error.message;
+      queueItem.attempts = (queueItem.attempts || 0) + 1;
 
-      if (queueItem.attempts >= queueItem.maxAttempts) {
-        queueItem.status = 'failed';
-      } else {
-        queueItem.status = 'queued'; // Retry
+      // Notify error
+      await this.notifyApplicationEvent('APPLICATION_ERROR', {
+        jobTitle: queueItem.jobData?.title,
+        company: queueItem.jobData?.company,
+        platform: queueItem.jobData?.platform,
+        error: { message: error.message },
+        attempts: queueItem.attempts,
+        maxAttempts: this.settings.maxRetryAttempts || 3
+      });
+
+      console.error('❌ Application failed:', queueItem.id, error);
+      
+      // Retry if within limits
+      if (queueItem.attempts < (this.settings.maxRetryAttempts || 3)) {
+        queueItem.status = 'queued';
+        queueItem.retryAt = Date.now() + (this.settings.retryDelay || 300000); // 5 minutes
+        console.log(`🔄 Scheduling retry for ${queueItem.id} (attempt ${queueItem.attempts + 1})`);
       }
-
-      console.error(`Application processing failed:`, error);
     }
 
     // Notify popup about status change
     await this.notifyPopup({
       type: 'APPLICATION_STATUS',
       data: queueItem
+    });
+  }
+
+  async processBulkApplications(jobDataArray) {
+    const totalJobs = jobDataArray.length;
+    let completed = 0;
+    let successful = 0;
+    let failed = 0;
+    const startTime = Date.now();
+
+    // Notify bulk start
+    await this.notifyApplicationEvent('BULK_START', { totalJobs });
+
+    for (const jobData of jobDataArray) {
+      const queueItem = this.createQueueItem(jobData);
+      this.queue.push(queueItem);
+      
+      try {
+        await this.processApplication(queueItem);
+        
+        if (queueItem.status === 'completed') {
+          successful++;
+        } else {
+          failed++;
+        }
+        
+        completed++;
+        
+        // Update progress every few applications
+        if (completed % Math.ceil(totalJobs / 10) === 0 || completed === totalJobs) {
+          await this.notifyApplicationEvent('BULK_PROGRESS', {
+            completed,
+            total: totalJobs,
+            successful,
+            failed,
+            currentJob: jobData,
+            estimatedTimeRemaining: this.calculateEstimatedTime(completed, totalJobs, startTime)
+          });
+        }
+
+        // Add delay between applications for stealth
+        if (completed < totalJobs) {
+          const delay = this.calculateStealthDelay();
+          await this.sleep(delay);
+        }
+        
+      } catch (error) {
+        console.error('❌ Failed to process bulk application:', error);
+        failed++;
+        completed++;
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    
+    // Notify bulk complete
+    await this.notifyApplicationEvent('BULK_COMPLETE', {
+      total: totalJobs,
+      successful,
+      failed,
+      skipped: totalJobs - successful - failed,
+      duration,
+      successRate: Math.round((successful / totalJobs) * 100)
+    });
+
+    return { totalJobs, successful, failed, duration };
+  }
+
+  async notifyApplicationEvent(eventType, data) {
+    try {
+      await handleApplicationEvent({ type: eventType, data });
+    } catch (error) {
+      console.error('❌ Failed to handle notification event:', error);
+    }
+  }
+
+  calculateEstimatedTime(completed, total, startTime) {
+    if (completed === 0) return 0;
+    
+    const elapsed = Date.now() - startTime;
+    const averageTime = elapsed / completed;
+    const remaining = total - completed;
+    
+    return remaining * averageTime;
+  }
+
+  async updateApplicationProgress(item) {
+    // Broadcast progress update to popup
+    await this.broadcastMessage({
+      type: MessageTypes.APPLICATION_PROGRESS,
+      data: {
+        id: item.id,
+        progress: item.progress,
+        status: item.status
+      }
     });
   }
 

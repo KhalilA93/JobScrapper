@@ -4,6 +4,7 @@
 import { MessageHelper, MessageBuilder, MessageTypes } from '../utils/messageProtocol.js';
 import { ApplicationStateMachine } from '../utils/applicationStateMachine.js';
 import { AutoFillSystem } from '../utils/autoFillSystem.js';
+import { contentNotify } from '../utils/notificationIntegration.js';
 
 /**
  * Content Script Integration with Background Service Worker
@@ -13,6 +14,7 @@ class ContentScriptManager {
   constructor() {
     this.isProcessing = false;
     this.currentApplication = null;
+    this.applicationStartTime = null;
     this.initialize();
   }
 
@@ -124,6 +126,16 @@ class ContentScriptManager {
     };
 
     try {
+      // Notify application started
+      await contentNotify.applicationStarted({
+        jobTitle: data.jobData.title,
+        company: data.jobData.company,
+        platform: this.currentPlatform,
+        url: window.location.href
+      });
+
+      console.log('🚀 Starting job application process for:', data.jobData.title);
+      
       // Initialize application state machine
       const stateMachine = new ApplicationStateMachine({
         enableStealth: data.settings.enableStealth,
@@ -140,11 +152,57 @@ class ContentScriptManager {
         }
       );
 
+      if (result.success) {
+        const processingTime = Date.now() - this.applicationStartTime;
+        
+        // Notify success
+        await contentNotify.applicationCompleted({
+          jobTitle: data.jobData.title,
+          company: data.jobData.company,
+          platform: this.currentPlatform,
+          url: window.location.href,
+          appliedAt: new Date().toISOString(),
+          processingTime,
+          automatedApplication: true,
+          stepsCompleted: result.currentStep
+        });
+        
+        console.log('✅ Job application completed successfully');
+      } else {
+        // Notify failure
+        await contentNotify.applicationFailed({
+          jobTitle: data.jobData.title,
+          company: data.jobData.company,
+          platform: this.currentPlatform,
+          url: window.location.href,
+          error: { message: result.errors?.[0] || 'Application process failed' },
+          attempts: 1,
+          maxAttempts: 3,
+          stepsCompleted: result.currentStep,
+          failedStep: result.currentStep
+        });
+        
+        console.error('❌ Job application failed:', result.errors?.[0]);
+      }
+      
       // Report completion
       await this.reportCompletion(result);
       return result;
 
     } catch (error) {
+      // Notify critical error
+      await contentNotify.applicationFailed({
+        jobTitle: data.jobData.title,
+        company: data.jobData.company,
+        platform: this.currentPlatform,
+        url: window.location.href,
+        error: { message: error.message },
+        attempts: 1,
+        maxAttempts: 3,
+        criticalError: true
+      });
+      
+      console.error('❌ Critical error during job application:', error);
       await this.reportError(error);
       throw error;
     } finally {
