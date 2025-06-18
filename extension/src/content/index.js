@@ -1,3 +1,4 @@
+import { JobSiteDetector } from './jobSiteDetector.js';
 import { jobScrapers } from '@utils/scrapers';
 import { formFiller } from '@utils/formFiller';
 import { domUtils } from '@utils/domUtils';
@@ -6,35 +7,55 @@ class ContentScript {
   constructor() {
     this.platform = null;
     this.isActive = false;
+    this.detector = new JobSiteDetector();
     this.initialize();
   }
-
   initialize() {
-    this.detectPlatform();
+    // Initialize job site detection
+    this.detector.init();
+    
+    // Listen for site detection events
+    this.detector.onSiteDetected((event) => {
+      const { site, isJobPage } = event.detail;
+      this.platform = site;
+      this.isActive = isJobPage;
+      
+      if (isJobPage) {
+        console.log(`JobScrapper: Detected ${site} job page`);
+        this.handleJobPageDetected(event.detail);
+      }
+    });
+
     this.setupMessageListener();
     this.startObserving();
   }
 
-  detectPlatform() {
-    const hostname = window.location.hostname;
+  handleJobPageDetected(siteData) {
+    // Handle job page detection
+    this.platform = siteData.site;
+    this.setupJobPageFeatures(siteData);
     
-    if (hostname.includes('linkedin.com')) {
-      this.platform = 'linkedin';
-    } else if (hostname.includes('indeed.com')) {
-      this.platform = 'indeed';
-    } else if (hostname.includes('glassdoor.com')) {
-      this.platform = 'glassdoor';
-    } else if (hostname.includes('jobs.google.com')) {
-      this.platform = 'google';
-    } else if (hostname.includes('ziprecruiter.com')) {
-      this.platform = 'ziprecruiter';
-    } else if (hostname.includes('monster.com')) {
-      this.platform = 'monster';
-    }
+    // Notify background script
+    this.sendMessage('JOB_SITE_DETECTED', { 
+      platform: this.platform,
+      isJobPage: true,
+      features: siteData.config.features
+    });
+  }
 
-    if (this.platform) {
-      this.sendMessage('JOB_SITE_DETECTED', { platform: this.platform });
+  setupJobPageFeatures(siteData) {
+    // Setup features based on detected site
+    if (siteData.config.features.easyApply) {
+      this.setupEasyApply();
     }
+    
+    // Initialize scraping capabilities
+    this.isActive = true;
+  }
+
+  setupEasyApply() {
+    // Easy apply functionality
+    console.log('Setting up Easy Apply for', this.platform);
   }
 
   setupMessageListener() {
