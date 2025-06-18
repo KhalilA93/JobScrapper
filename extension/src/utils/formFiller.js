@@ -1,6 +1,16 @@
-// Form filling utilities for job applications
+// Form filling utilities for job applications with stealth techniques
+import { StealthScraper } from './stealthScraper.js';
+import { StealthUtils, StealthInteractions } from './stealthUtils.js';
+
+// Initialize stealth instance for form filling
+const stealth = new StealthScraper({
+  minActionDelay: 300,
+  maxActionDelay: 1200,
+  enableMouseSimulation: true
+});
+
 export const formFiller = {
-  // LinkedIn form filler
+  // LinkedIn form filler with stealth
   linkedin: {
     async fillForm(userProfile) {
       const fields = {
@@ -10,33 +20,35 @@ export const formFiller = {
         'input[name*="email"], input[type="email"]': userProfile.email,
         'input[name*="phone"], input[type="tel"]': userProfile.phone,
         'textarea[name*="coverLetter"], textarea[id*="coverLetter"]': userProfile.coverLetter
-      };
-
-      await this.fillFields(fields);
+      };      await this.fillFieldsStealth(fields);
       await this.handleFileUploads(userProfile);
     },
 
-    async fillFields(fields) {
+    async fillFieldsStealth(fields) {
       for (const [selector, value] of Object.entries(fields)) {
         if (!value) continue;
         
         const elements = document.querySelectorAll(selector);
         for (const element of elements) {
-          await this.fillField(element, value);
+          await this.fillFieldStealth(element, value);
         }
       }
     },
 
-    async fillField(element, value) {
+    async fillFieldStealth(element, value) {
       if (!element || !value) return;
 
-      element.focus();
-      element.value = value;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
+      // Use stealth typing instead of direct value assignment
+      await StealthInteractions.naturalClick(element);
+      await stealth.simulateTyping(element, value, {
+        minDelay: 80,
+        maxDelay: 250,
+        mistakes: 0.01 // 1% chance of typos
+      });
       
       // Add visual feedback
       element.classList.add('jobscrapper-filled');
+      await StealthUtils.microDelay();
     },
 
     async handleFileUploads(userProfile) {
@@ -51,8 +63,7 @@ export const formFiller = {
       }
     }
   },
-
-  // Indeed form filler
+  // Indeed form filler with stealth
   indeed: {
     async fillForm(userProfile) {
       const fields = {
@@ -62,30 +73,35 @@ export const formFiller = {
         'textarea[name="applicant.coverLetter"]': userProfile.coverLetter
       };
 
-      await this.fillFields(fields);
+      await this.fillFieldsStealth(fields);
     },
 
-    async fillFields(fields) {
+    async fillFieldsStealth(fields) {
       for (const [selector, value] of Object.entries(fields)) {
         if (!value) continue;
         
         const element = document.querySelector(selector);
         if (element) {
-          await this.fillField(element, value);
+          await this.fillFieldStealth(element, value);
         }
       }
     },
 
-    async fillField(element, value) {
-      element.focus();
-      element.value = value;
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
+    async fillFieldStealth(element, value) {
+      if (!element || !value) return;
+
+      await StealthInteractions.naturalClick(element);
+      await stealth.simulateTyping(element, value, {
+        minDelay: 100,
+        maxDelay: 300,
+        mistakes: 0.015 // Slightly higher error rate for Indeed
+      });
+      
       element.classList.add('jobscrapper-filled');
+      await StealthUtils.microDelay();
     }
   },
-
-  // Generic form filler
+  // Generic form filler with stealth
   generic: {
     async fillForm(userProfile) {
       const commonFields = [
@@ -108,37 +124,36 @@ export const formFiller = {
         for (const selector of field.selectors) {
           const elements = document.querySelectorAll(selector);
           for (const element of elements) {
-            await this.fillField(element, field.value);
+            await this.fillFieldStealth(element, field.value);
           }
         }
       }
     },
 
-    async fillField(element, value) {
+    async fillFieldStealth(element, value) {
       if (!element || !value) return;
 
       // Skip if field is already filled
       if (element.value && element.value.trim()) return;
 
-      element.focus();
-      
       // Handle different input types
       if (element.type === 'checkbox' || element.type === 'radio') {
+        await StealthInteractions.naturalClick(element);
         element.checked = Boolean(value);
+        element.dispatchEvent(new Event('change', { bubbles: true }));
       } else {
-        element.value = value;
+        // Use stealth typing for text inputs
+        await StealthInteractions.naturalClick(element);
+        await stealth.simulateTyping(element, value, {
+          minDelay: 90,
+          maxDelay: 280,
+          mistakes: 0.012
+        });
       }
-
-      // Trigger events
-      element.dispatchEvent(new Event('input', { bubbles: true }));
-      element.dispatchEvent(new Event('change', { bubbles: true }));
-      element.dispatchEvent(new Event('blur', { bubbles: true }));
       
       // Visual feedback
       element.classList.add('jobscrapper-filled');
-      
-      // Small delay to ensure the form processes the input
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await StealthUtils.microDelay();
     }
   }
 };
