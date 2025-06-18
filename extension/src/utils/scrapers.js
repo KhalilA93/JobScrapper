@@ -1,5 +1,19 @@
 // Job scraping utilities for different platforms
+import { JobDataExtractor } from './jobDataExtractor.js';
+
+// Initialize the data extractor
+const extractor = new JobDataExtractor();
+
 export const jobScrapers = {
+  // Modern extraction using JobDataExtractor
+  extractCurrentJob() {
+    return extractor.extractFromCurrentPage();
+  },
+
+  extractJobData(siteName, element = document) {
+    return extractor.extractJobData(siteName, element);
+  },
+
   // LinkedIn job scraper
   linkedin: {
     async extractJobs() {
@@ -8,18 +22,24 @@ export const jobScrapers = {
       
       for (const card of jobCards) {
         try {
-          const job = {
-            title: this.getTextContent(card, 'h3 a, .job-search-card__title a'),
-            company: this.getTextContent(card, '.job-search-card__subtitle-primary a, h4 a'),
-            location: this.getTextContent(card, '.job-search-card__subtitle-secondary, .job-search-card__location'),
-            url: this.getHref(card, 'h3 a, .job-search-card__title a'),
-            description: this.getTextContent(card, '.job-search-card__snippet'),
-            postedDate: this.getTextContent(card, 'time'),
-            salary: null // LinkedIn rarely shows salary in search results
-          };
-          
-          if (job.title && job.company) {
-            jobs.push(job);
+          // Use new extractor for individual cards
+          const jobData = extractor.extractJobData('linkedin', card);
+          if (jobData && jobData.isValid) {
+            jobs.push(jobData);          } else {
+            // Fallback to legacy extraction
+            const job = {
+              title: this.getTextContent(card, 'h3 a, .job-search-card__title a'),
+              company: this.getTextContent(card, '.job-search-card__subtitle-primary a, h4 a'),
+              location: this.getTextContent(card, '.job-search-card__subtitle-secondary, .job-search-card__location'),
+              url: this.getHref(card, 'h3 a, .job-search-card__title a'),
+              description: this.getTextContent(card, '.job-search-card__snippet'),
+              postedDate: this.getTextContent(card, 'time'),
+              salary: null // LinkedIn rarely shows salary in search results
+            };
+            
+            if (job.title && job.company) {
+              jobs.push(job);
+            }
           }
         } catch (error) {
           console.warn('Error extracting LinkedIn job:', error);
