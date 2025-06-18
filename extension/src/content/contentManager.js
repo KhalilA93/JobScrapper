@@ -5,10 +5,11 @@ import { MessageHelper, MessageBuilder, MessageTypes } from '../utils/messagePro
 import { ApplicationStateMachine } from '../utils/applicationStateMachine.js';
 import { AutoFillSystem } from '../utils/autoFillSystem.js';
 import { contentNotify } from '../utils/notificationIntegration.js';
+import { contentScriptErrorHandler } from '../utils/errorHandlingIntegration.js';
 
 /**
  * Content Script Integration with Background Service Worker
- * Shows communication patterns and job processing
+ * Shows communication patterns and job processing with comprehensive error handling
  */
 class ContentScriptManager {
   constructor() {
@@ -21,30 +22,222 @@ class ContentScriptManager {
   initialize() {
     this.setupMessageListeners();
     this.detectCurrentJob();
+    this.setupErrorHandling();
     console.log('📱 Content script communication initialized');
   }
 
+  /**
+   * Setup error handling for content script operations
+   */
+  setupErrorHandling() {
+    // Monitor DOM changes for error recovery
+    contentScriptErrorHandler.setupDOMMonitoring((mutations) => {
+      // Handle dynamic content changes that might affect job processing
+      if (this.isProcessing && this.currentApplication) {
+        this.handleDOMChanges(mutations);
+      }
+    });
+  }
+
   // ============================================================================
-  // MESSAGE LISTENERS
+  // MESSAGE LISTENERS WITH ERROR HANDLING
   // ============================================================================
 
   setupMessageListeners() {
     // Listen for job site detection from background
-    MessageHelper.onMessage(MessageTypes.JOB_SITE_DETECTED, (data) => {
-      console.log(`🎯 Job site detected: ${data.platform}`);
-      this.onJobSiteDetected(data);
+    MessageHelper.onMessage(MessageTypes.JOB_SITE_DETECTED, async (data) => {
+      try {
+        console.log(`🎯 Job site detected: ${data.platform}`);
+        await this.onJobSiteDetected(data);
+      } catch (error) {
+        await contentNotify.error('Job site detection failed', {
+          platform: data.platform,
+          error: error.message
+        });
+      }
     });
 
-    // Listen for application start command
+    // Listen for application start command with error recovery
     MessageHelper.onMessage(MessageTypes.START_APPLICATION, async (data) => {
-      console.log('🚀 Starting application process');
-      return await this.startApplication(data);
+      try {
+        console.log('🚀 Starting application process');
+        return await this.startApplicationSafely(data);
+      } catch (error) {
+        await contentNotify.error('Application start failed', {
+          jobId: data.jobId,
+          error: error.message
+        });
+        return { success: false, error: error.message };
+      }
     });
 
     // Listen for job checking requests
-    MessageHelper.onMessage(MessageTypes.CHECK_FOR_JOBS, () => {
-      this.detectCurrentJob();
+    MessageHelper.onMessage(MessageTypes.CHECK_FOR_JOBS, async () => {
+      try {
+        await this.detectCurrentJobSafely();
+      } catch (error) {
+        console.warn('Job detection failed:', error);
+      }
     });
+  }
+
+  // ============================================================================
+  // ERROR-SAFE JOB PROCESSING
+  // ============================================================================
+
+  /**
+   * Safe application start with comprehensive error handling
+   */
+  async startApplicationSafely(data) {
+    return await contentScriptErrorHandler.extractJobDataSafely(async () => {
+      this.isProcessing = true;
+      this.applicationStartTime = Date.now();
+      
+      try {
+        // Initialize application state machine with error recovery
+        const stateMachine = new ApplicationStateMachine({
+          jobId: data.jobId,
+          platform: data.platform,
+          errorHandler: contentScriptErrorHandler
+        });
+
+        // Start application process
+        const result = await this.processApplicationSteps(stateMachine, data);
+        
+        // Notify success
+        await contentNotify.success('Application submitted successfully', {
+          jobId: data.jobId,
+          platform: data.platform,
+          duration: Date.now() - this.applicationStartTime
+        });
+
+        return result;
+      } finally {
+        this.isProcessing = false;
+        this.currentApplication = null;
+      }
+    }, {
+      operation: 'start_application',
+      jobId: data.jobId,
+      platform: data.platform
+    });
+  }
+
+  /**
+   * Process application steps with error recovery
+   */
+  async processApplicationSteps(stateMachine, data) {
+    const steps = [
+      () => this.fillApplicationFormSafely(data),
+      () => this.uploadDocumentsSafely(data),
+      () => this.submitApplicationSafely(data),
+      () => this.verifySubmissionSafely(data)
+    ];
+
+    const results = [];
+    for (const [index, step] of steps.entries()) {
+      try {
+        const result = await step();
+        results.push({ step: index, success: true, result });
+        
+        // Update state machine
+        await stateMachine.transition(`step_${index}_completed`);
+      } catch (error) {
+        // Handle step failure with recovery attempt
+        const recovery = await this.attemptStepRecovery(step, index, error, data);
+        results.push({ step: index, success: recovery.success, error: error.message, recovery });
+        
+        if (!recovery.success) {
+          throw new Error(`Application step ${index} failed: ${error.message}`);
+        }
+      }
+    }
+
+    return { success: true, steps: results };
+  }
+
+  /**
+   * Safe form filling with error handling
+   */
+  async fillApplicationFormSafely(data) {
+    return await contentScriptErrorHandler.fillFormSafely(
+      async (form, formData) => {
+        const autoFill = new AutoFillSystem({
+          errorHandler: contentScriptErrorHandler
+        });
+        
+        return await autoFill.fillForm(form, formData, {
+          platform: data.platform,
+          jobId: data.jobId
+        });
+      },
+      data.applicationData,
+      {
+        formSelector: this.getFormSelector(data.platform),
+        platform: data.platform,
+        jobId: data.jobId
+      }
+    );
+  }
+
+  /**
+   * Safe button clicking for form submission
+   */
+  async submitApplicationSafely(data) {
+    const submitSelector = this.getSubmitButtonSelector(data.platform);
+    
+    return await contentScriptErrorHandler.clickButtonSafely(submitSelector, {
+      platform: data.platform,
+      jobId: data.jobId,
+      operation: 'submit_application',
+      originalUrl: window.location.href
+    });
+  }
+
+  /**
+   * Safe job detection with error recovery
+   */
+  async detectCurrentJobSafely() {
+    return await contentScriptErrorHandler.extractJobDataSafely(async () => {
+      return await this.detectCurrentJob();
+    }, {
+      operation: 'detect_job',
+      url: window.location.href,
+      selector: this.getJobSelector()
+    });
+  }
+
+  /**
+   * Attempt to recover from step failures
+   */
+  async attemptStepRecovery(failedStep, stepIndex, error, data) {
+    const recoveryStrategies = {
+      0: () => this.recoverFormFilling(data, error),
+      1: () => this.recoverDocumentUpload(data, error),
+      2: () => this.recoverSubmission(data, error),
+      3: () => this.recoverVerification(data, error)
+    };
+
+    const recovery = recoveryStrategies[stepIndex];
+    if (recovery) {
+      try {
+        const result = await recovery();
+        await contentNotify.info('Step recovery successful', {
+          step: stepIndex,
+          jobId: data.jobId
+        });
+        return { success: true, result };
+      } catch (recoveryError) {
+        await contentNotify.error('Step recovery failed', {
+          step: stepIndex,
+          originalError: error.message,
+          recoveryError: recoveryError.message
+        });
+        return { success: false, error: recoveryError };
+      }
+    }
+
+    return { success: false, error: new Error('No recovery strategy available') };
   }
 
   // ============================================================================

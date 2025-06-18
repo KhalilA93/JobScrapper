@@ -5,10 +5,11 @@ import { ApplicationStateMachine } from '../utils/applicationStateMachine.js';
 import { AutoFillSystem } from '../utils/autoFillSystem.js';
 import { StealthUtils } from '../utils/stealthUtils.js';
 import { initializeNotifications, handleApplicationEvent } from '../utils/notificationIntegration.js';
+import { backgroundScriptErrorHandler } from '../utils/errorHandlingIntegration.js';
 
 /**
  * Background Service Worker for JobScrapper Extension
- * Manages communication, job processing, and API synchronization
+ * Manages communication, job processing, and API synchronization with comprehensive error handling
  */
 class JobScrapperService {
   constructor() {
@@ -18,6 +19,7 @@ class JobScrapperService {
     this.syncQueue = [];
     this.isProcessing = false;
     this.notificationManager = null;
+    this.errorRecoveryAttempts = new Map();
     
     this.initialize();
   }
@@ -25,13 +27,33 @@ class JobScrapperService {
   async initialize() {
     console.log('🚀 JobScrapper Service Worker initializing...');
     
-    await this.loadSettings();
-    await this.initializeQueue();
-    await this.initializeNotifications();
-    this.setupMessageHandlers();
-    this.setupPeriodicTasks();
-    
-    console.log('✅ JobScrapper Service Worker ready');
+    try {
+      await this.loadSettings();
+      await this.initializeQueue();
+      await this.initializeNotifications();
+      await this.initializeErrorHandling();
+      this.setupMessageHandlers();
+      this.setupPeriodicTasks();
+      
+      console.log('✅ JobScrapper Service Worker ready');
+    } catch (error) {
+      console.error('❌ Service Worker initialization failed:', error);
+      await this.handleInitializationError(error);
+    }
+  }
+
+  async initializeErrorHandling() {
+    // Setup global error handlers for the service worker
+    self.addEventListener('error', (event) => {
+      console.error('🚨 Service Worker Error:', event.error);
+      this.handleServiceWorkerError(event.error);
+    });
+
+    self.addEventListener('unhandledrejection', (event) => {
+      console.error('🚨 Unhandled Promise Rejection:', event.reason);
+      this.handleServiceWorkerError(event.reason);
+      event.preventDefault();
+    });
   }
 
   async initializeNotifications() {
@@ -40,68 +62,251 @@ class JobScrapperService {
       console.log('🔔 Notification system initialized');
     } catch (error) {
       console.error('❌ Failed to initialize notifications:', error);
+      // Fallback to basic console logging
+      this.notificationManager = {
+        notify: (type, title, options) => console.log(`${type}: ${title}`, options)
+      };
     }
   }
 
   // ============================================================================
-  // 1. MESSAGE PASSING SYSTEM
+  // 1. MESSAGE PASSING SYSTEM WITH ERROR HANDLING
   // ============================================================================
 
   setupMessageHandlers() {
-    // Content Script Communication
-    this.messageHandlers.set('JOB_DETECTED', this.handleJobDetected.bind(this));
-    this.messageHandlers.set('APPLICATION_START', this.handleApplicationStart.bind(this));
-    this.messageHandlers.set('APPLICATION_STEP', this.handleApplicationStep.bind(this));
-    this.messageHandlers.set('APPLICATION_COMPLETE', this.handleApplicationComplete.bind(this));
-    this.messageHandlers.set('APPLICATION_ERROR', this.handleApplicationError.bind(this));
+    // Content Script Communication with error wrapping
+    this.messageHandlers.set('JOB_DETECTED', this.wrapMessageHandler(this.handleJobDetected.bind(this)));
+    this.messageHandlers.set('APPLICATION_START', this.wrapMessageHandler(this.handleApplicationStart.bind(this)));
+    this.messageHandlers.set('APPLICATION_STEP', this.wrapMessageHandler(this.handleApplicationStep.bind(this)));
+    this.messageHandlers.set('APPLICATION_COMPLETE', this.wrapMessageHandler(this.handleApplicationComplete.bind(this)));
+    this.messageHandlers.set('APPLICATION_ERROR', this.wrapMessageHandler(this.handleApplicationError.bind(this)));
     
-    // Popup Communication
-    this.messageHandlers.set('GET_STATUS', this.handleGetStatus.bind(this));
-    this.messageHandlers.set('START_APPLICATION', this.handleStartApplication.bind(this));
-    this.messageHandlers.set('PAUSE_APPLICATION', this.handlePauseApplication.bind(this));
-    this.messageHandlers.set('GET_QUEUE', this.handleGetQueue.bind(this));
-    this.messageHandlers.set('CLEAR_QUEUE', this.handleClearQueue.bind(this));
+    // Popup Communication with error wrapping
+    this.messageHandlers.set('GET_STATUS', this.wrapMessageHandler(this.handleGetStatus.bind(this)));
+    this.messageHandlers.set('START_APPLICATION', this.wrapMessageHandler(this.handleStartApplication.bind(this)));
+    this.messageHandlers.set('PAUSE_APPLICATION', this.wrapMessageHandler(this.handlePauseApplication.bind(this)));
+    this.messageHandlers.set('GET_QUEUE', this.wrapMessageHandler(this.handleGetQueue.bind(this)));
+    this.messageHandlers.set('CLEAR_QUEUE', this.wrapMessageHandler(this.handleClearQueue.bind(this)));
     
-    // Data Sync
-    this.messageHandlers.set('SYNC_DATA', this.handleSyncData.bind(this));
-    this.messageHandlers.set('GET_ANALYTICS', this.handleGetAnalytics.bind(this));
+    // Data Sync with error handling
+    this.messageHandlers.set('SYNC_DATA', this.wrapMessageHandler(this.handleSyncData.bind(this)));
+    this.messageHandlers.set('GET_ANALYTICS', this.wrapMessageHandler(this.handleGetAnalytics.bind(this)));
+  }
+
+  /**
+   * Wrap message handlers with error handling
+   */
+  wrapMessageHandler(handler) {
+    return async (message, sender, sendResponse) => {
+      try {
+        const result = await handler(message, sender, sendResponse);
+        return { success: true, data: result };
+      } catch (error) {
+        console.error(`Message handler error for ${message.type}:`, error);
+        
+        // Attempt error recovery
+        const recovery = await this.attemptMessageHandlerRecovery(message, error);
+        
+        return {
+          success: false,
+          error: error.message,
+          recovery: recovery.success,
+          data: recovery.data
+        };
+      }
+    };
+  }
+
+  /**
+   * Attempt recovery from message handler errors
+   */
+  async attemptMessageHandlerRecovery(message, error) {
+    const errorKey = `${message.type}_${Date.now()}`;
+    const attempts = this.errorRecoveryAttempts.get(message.type) || 0;
+    
+    if (attempts >= 3) {
+      console.error(`Max recovery attempts reached for ${message.type}`);
+      return { success: false, data: null };
+    }
+
+    this.errorRecoveryAttempts.set(message.type, attempts + 1);
+
+    try {
+      // Apply recovery strategy based on message type
+      switch (message.type) {
+        case 'APPLICATION_START':
+          return await this.recoverApplicationStart(message, error);
+        case 'SYNC_DATA':
+          return await this.recoverDataSync(message, error);
+        case 'GET_STATUS':
+          return await this.recoverStatusCheck(message, error);
+        default:
+          return { success: false, data: null };
+      }
+    } catch (recoveryError) {
+      console.error(`Recovery failed for ${message.type}:`, recoveryError);
+      return { success: false, data: null };
+    }
   }
 
   setupEventListeners() {
-    // Message listener with proper response handling
+    // Message listener with proper error handling
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      this.handleMessage(message, sender, sendResponse);
+      this.handleMessageSafely(message, sender, sendResponse);
       return true; // Keep channel open for async responses
     });
 
-    // Tab updates for job site detection
-    chrome.tabs.onUpdated.addListener(this.handleTabUpdate.bind(this));
-    
-    // Extension lifecycle
-    chrome.runtime.onInstalled.addListener(this.handleInstall.bind(this));
-    chrome.runtime.onStartup.addListener(this.handleStartup.bind(this));
-    
-    // Storage changes
-    chrome.storage.onChanged.addListener(this.handleStorageChange.bind(this));
+    // Tab updates for job site detection with error handling
+    chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+      try {
+        await this.handleTabUpdate(tabId, changeInfo, tab);
+      } catch (error) {
+        console.error('Tab update handler error:', error);
+      }
+    });
   }
 
-  async handleMessage(message, sender, sendResponse) {
+  /**
+   * Safe message handling with comprehensive error recovery
+   */
+  async handleMessageSafely(message, sender, sendResponse) {
     try {
       const handler = this.messageHandlers.get(message.type);
+      
       if (!handler) {
         throw new Error(`Unknown message type: ${message.type}`);
       }
 
-      const response = await handler(message.data, sender);
-      sendResponse({ success: true, data: response });
-
+      const result = await handler(message, sender, sendResponse);
+      sendResponse(result);
     } catch (error) {
-      console.error(`Message handling error (${message.type}):`, error);
-      sendResponse({ 
-        success: false, 
+      console.error('Message handling error:', error);
+      
+      // Send error response
+      sendResponse({
+        success: false,
         error: error.message,
-        timestamp: Date.now()
+        timestamp: new Date().toISOString()
       });
+      
+      // Log error for analytics
+      await this.logError('message_handling', error, {
+        messageType: message.type,
+        senderId: sender.id,
+        tabId: sender.tab?.id
+      });
+    }
+  }
+
+  // ============================================================================
+  // ERROR RECOVERY STRATEGIES
+  // ============================================================================
+
+  /**
+   * Recover from application start errors
+   */
+  async recoverApplicationStart(message, error) {
+    try {
+      // Clear any corrupted application state
+      if (message.tabId) {
+        this.applicationQueue.delete(message.tabId);
+      }
+
+      // Retry with basic configuration
+      const basicConfig = {
+        ...message,
+        retryAttempt: true,
+        simplifiedMode: true
+      };
+
+      const result = await this.handleApplicationStart(basicConfig);
+      return { success: true, data: result };
+    } catch (recoveryError) {
+      return { success: false, data: null };
+    }
+  }
+
+  /**
+   * Recover from data sync errors
+   */
+  async recoverDataSync(message, error) {
+    try {
+      // Use cached data or queue for later sync
+      const cachedData = await this.getCachedData(message.dataType);
+      
+      if (cachedData) {
+        return { success: true, data: cachedData };
+      }
+
+      // Queue for retry
+      this.queueForLaterSync(message);
+      return { success: true, data: { queued: true } };
+    } catch (recoveryError) {
+      return { success: false, data: null };
+    }
+  }
+
+  /**
+   * Handle service worker initialization errors
+   */
+  async handleInitializationError(error) {
+    console.error('Service Worker initialization error:', error);
+    
+    try {
+      // Attempt basic initialization
+      await this.basicInitialization();
+      
+      // Notify user of degraded functionality
+      if (this.notificationManager) {
+        await this.notificationManager.notify('warning', 'Limited Functionality', {
+          message: 'JobScrapper is running in reduced functionality mode'
+        });
+      }
+    } catch (fallbackError) {
+      console.error('Fallback initialization failed:', fallbackError);
+    }
+  }
+
+  /**
+   * Handle general service worker errors
+   */
+  async handleServiceWorkerError(error) {
+    await this.logError('service_worker', error, {
+      timestamp: new Date().toISOString(),
+      url: self.location?.href
+    });
+
+    // Attempt to recover based on error type
+    if (error.message.includes('storage')) {
+      await this.recoverStorageError(error);
+    } else if (error.message.includes('network')) {
+      await this.recoverNetworkError(error);
+    }
+  }
+
+  /**
+   * Log errors for monitoring and analytics
+   */
+  async logError(category, error, context = {}) {
+    const errorLog = {
+      category,
+      message: error.message,
+      stack: error.stack,
+      context,
+      timestamp: new Date().toISOString(),
+      version: chrome.runtime.getManifest().version
+    };
+
+    try {
+      // Store error log locally
+      await chrome.storage.local.set({
+        [`error_${Date.now()}`]: errorLog
+      });
+
+      // Send to analytics if available
+      await this.sendErrorToAnalytics(errorLog);
+    } catch (logError) {
+      console.error('Failed to log error:', logError);
     }
   }
 
