@@ -6,16 +6,18 @@ import { ApplicationStateMachine } from '../utils/applicationStateMachine.js';
 import { AutoFillSystem } from '../utils/autoFillSystem.js';
 import { contentNotify } from '../utils/notificationIntegration.js';
 import { contentScriptErrorHandler } from '../utils/errorHandlingIntegration.js';
+import { domCache, memoryManager, performanceMonitor } from '../utils/performanceOptimizer.js';
 
 /**
  * Content Script Integration with Background Service Worker
- * Shows communication patterns and job processing with comprehensive error handling
+ * Shows communication patterns and job processing with comprehensive error handling and performance optimization
  */
 class ContentScriptManager {
   constructor() {
     this.isProcessing = false;
     this.currentApplication = null;
     this.applicationStartTime = null;
+    this.performanceTimer = null;
     this.initialize();
   }
 
@@ -23,7 +25,36 @@ class ContentScriptManager {
     this.setupMessageListeners();
     this.detectCurrentJob();
     this.setupErrorHandling();
-    console.log('📱 Content script communication initialized');
+    this.setupPerformanceOptimization();
+    console.log('📱 Content script communication initialized with performance optimization');
+  }
+
+  /**
+   * Setup performance optimization for content script operations
+   */
+  setupPerformanceOptimization() {
+    // Register content script for memory management
+    memoryManager.registerObject(this, (obj) => {
+      obj.cleanup();
+    });
+
+    // Setup DOM cache for efficient querying
+    this.domQueryCache = domCache;
+
+    // Monitor performance metrics
+    performanceMonitor.recordMetric('performance', 'content_script_loaded', 1, {
+      url: window.location.href,
+      platform: this.detectPlatform()
+    });
+
+    // Setup periodic memory monitoring
+    this.memoryCheckInterval = memoryManager.setInterval(() => {
+      const memStats = memoryManager.checkMemoryUsage();
+      if (memStats && memStats.ratio > 0.7) {
+        console.warn('High memory usage in content script:', memStats);
+        this.optimizeMemoryUsage();
+      }
+    }, 30000);
   }
 
   /**
@@ -35,6 +66,14 @@ class ContentScriptManager {
       // Handle dynamic content changes that might affect job processing
       if (this.isProcessing && this.currentApplication) {
         this.handleDOMChanges(mutations);
+      }
+      
+      // Invalidate DOM cache for changed elements
+      if (mutations.length > 10) {
+        this.domQueryCache.clear();
+        performanceMonitor.recordMetric('cache', 'dom_cache_cleared', 1, {
+          mutations: mutations.length
+        });
       }
     });
   }
@@ -160,24 +199,85 @@ class ContentScriptManager {
    * Safe form filling with error handling
    */
   async fillApplicationFormSafely(data) {
-    return await contentScriptErrorHandler.fillFormSafely(
-      async (form, formData) => {
-        const autoFill = new AutoFillSystem({
-          errorHandler: contentScriptErrorHandler
-        });
-        
-        return await autoFill.fillForm(form, formData, {
+    const timer = performanceMonitor.time('performance', 'form_filling');
+    
+    try {
+      return await contentScriptErrorHandler.fillFormSafely(
+        async (form, formData) => {
+          const autoFill = new AutoFillSystem({
+            errorHandler: contentScriptErrorHandler,
+            performanceMonitor: performanceMonitor
+          });
+          
+          // Use optimized field detection
+          const fields = await this.detectFormFieldsOptimized(form);
+          
+          // Fill form with performance tracking
+          const result = await autoFill.fillFormOptimized(form, formData, fields, {
+            platform: data.platform,
+            jobId: data.jobId
+          });
+          
+          // Record form filling metrics
+          performanceMonitor.recordMetric('performance', 'form_fields_filled', Object.keys(result).length, {
+            platform: data.platform,
+            success: result.success
+          });
+          
+          return result;
+        },
+        data.applicationData,
+        {
+          formSelector: this.getFormSelector(data.platform),
           platform: data.platform,
           jobId: data.jobId
-        });
-      },
-      data.applicationData,
-      {
-        formSelector: this.getFormSelector(data.platform),
-        platform: data.platform,
-        jobId: data.jobId
+        }
+      );
+    } finally {
+      timer.end();
+    }
+  }
+
+  /**
+   * Detect form fields using cached queries
+   */
+  async detectFormFieldsOptimized(form) {
+    const commonFields = [
+      'input[type="text"]',
+      'input[type="email"]',
+      'input[type="tel"]',
+      'textarea',
+      'select',
+      'input[type="file"]'
+    ];
+    
+    const fieldQueries = commonFields.map(selector => ({
+      name: selector,
+      selector,
+      context: form,
+      multiple: true
+    }));
+    
+    const timer = performanceMonitor.time('performance', 'field_detection');
+    const fieldElements = await this.domQueryCache.batchQuery(fieldQueries);
+    timer.end();
+    
+    // Process and categorize fields
+    const categorizedFields = {};
+    
+    for (const [selector, elements] of Object.entries(fieldElements)) {
+      if (elements && elements.length > 0) {
+        categorizedFields[selector] = elements.map(el => ({
+          element: el,
+          name: el.name || el.id || el.className,
+          type: el.type || el.tagName.toLowerCase(),
+          placeholder: el.placeholder,
+          required: el.required
+        }));
       }
-    );
+    }
+    
+    return categorizedFields;
   }
 
   /**
@@ -198,13 +298,91 @@ class ContentScriptManager {
    * Safe job detection with error recovery
    */
   async detectCurrentJobSafely() {
-    return await contentScriptErrorHandler.extractJobDataSafely(async () => {
-      return await this.detectCurrentJob();
-    }, {
-      operation: 'detect_job',
-      url: window.location.href,
-      selector: this.getJobSelector()
+    const timer = performanceMonitor.time('performance', 'job_detection');
+    
+    try {
+      return await contentScriptErrorHandler.extractJobDataSafely(async () => {
+        // Use cached DOM queries for better performance
+        const jobData = await this.extractJobDataOptimized();
+        
+        if (jobData) {
+          // Cache successful extraction patterns
+          this.cacheExtractionPattern(jobData);
+          
+          // Notify background of found job
+          await this.notifyJobDetected(jobData);
+        }
+        
+        return jobData;
+      }, {
+        operation: 'detect_job',
+        url: window.location.href,
+        selector: this.getJobSelector(),
+        platform: this.detectPlatform()
+      });
+    } finally {
+      timer.end();
+    }
+  }
+
+  /**
+   * Extract job data using optimized DOM queries
+   */
+  async extractJobDataOptimized() {
+    const platform = this.detectPlatform();
+    const extractionConfig = this.getExtractionConfig(platform);
+    
+    // Batch DOM queries for efficiency
+    const queries = [
+      { name: 'title', selector: extractionConfig.title },
+      { name: 'company', selector: extractionConfig.company },
+      { name: 'location', selector: extractionConfig.location },
+      { name: 'description', selector: extractionConfig.description },
+      { name: 'salary', selector: extractionConfig.salary, multiple: true },
+      { name: 'requirements', selector: extractionConfig.requirements, multiple: true }
+    ];
+    
+    const timer = performanceMonitor.time('performance', 'batch_dom_query');
+    const elements = await this.domQueryCache.batchQuery(queries);
+    const queryTime = timer.end();
+    
+    // Record DOM query performance
+    performanceMonitor.recordDOMQuery('batch_extraction', queryTime, false, {
+      platform,
+      queriesCount: queries.length
     });
+    
+    // Extract text content efficiently
+    const jobData = {
+      title: this.extractTextContent(elements.title),
+      company: this.extractTextContent(elements.company),
+      location: this.extractTextContent(elements.location),
+      description: this.extractTextContent(elements.description),
+      salary: this.extractSalaryInfo(elements.salary),
+      requirements: this.extractRequirements(elements.requirements),
+      url: window.location.href,
+      platform,
+      extractedAt: new Date().toISOString()
+    };
+    
+    // Validate extracted data
+    if (!jobData.title && !jobData.company) {
+      return null;
+    }
+    
+    return jobData;
+  }
+
+  /**
+   * Notify background of detected job
+   */
+  async notifyJobDetected(jobData) {
+    // Report job to background service
+    await MessageHelper.sendToBackground(
+      MessageBuilder.jobDetected(jobData)
+    );
+
+    console.log('✅ Job reported to background service:', jobData.title);
   }
 
   /**
@@ -463,94 +641,73 @@ class ContentScriptManager {
   // UTILITY METHODS (Brief examples)
   // ============================================================================
 
+  /**
+   * Get platform-specific extraction configuration
+   */
+  getExtractionConfig(platform) {
+    const configs = {
+      linkedin: {
+        title: '[data-test="job-title"], .job-details-jobs-unified-top-card__job-title',
+        company: '[data-test="company-name"], .job-details-jobs-unified-top-card__company-name',
+        location: '[data-test="job-location"], .job-details-jobs-unified-top-card__bullet',
+        description: '[data-test="job-description"], .job-details-jobs-unified-top-card__job-description',
+        salary: '.job-details-jobs-unified-top-card__job-insight--highlight',
+        requirements: '.job-details-jobs-unified-top-card__job-description li'
+      },
+      indeed: {
+        title: '[data-testid="jobsearch-JobInfoHeader-title"], h1.jobsearch-JobInfoHeader-title',
+        company: '[data-testid="company-name"], .jobsearch-InlineCompanyRating',
+        location: '[data-testid="job-location"], .jobsearch-JobInfoHeader-subtitle',
+        description: '[data-testid="jobsearch-JobComponent-description"], .jobsearch-jobDescriptionText',
+        salary: '.jobsearch-JobMetadataHeader-item',
+        requirements: '.jobsearch-jobDescriptionText li'
+      },
+      // Add more platform configs...
+    };
+    
+    return configs[platform] || configs.linkedin; // Default fallback
+  }
+
+  /**
+   * Extract text content efficiently
+   */
+  extractTextContent(element) {
+    if (!element) return null;
+    if (Array.isArray(element)) {
+      return element.map(el => el?.textContent?.trim()).filter(Boolean).join(' ');
+    }
+    return element.textContent?.trim() || null;
+  }
+
+  /**
+   * Cache successful extraction patterns for reuse
+   */
+  cacheExtractionPattern(jobData) {
+    const pattern = {
+      platform: jobData.platform,
+      selectors: this.getExtractionConfig(jobData.platform),
+      timestamp: Date.now()
+    };
+    
+    // Store pattern in session storage for reuse
+    try {
+      sessionStorage.setItem('job_extraction_pattern', JSON.stringify(pattern));
+    } catch (error) {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Detect current platform
+   */
   detectPlatform() {
     const hostname = window.location.hostname;
-    if (hostname.includes('linkedin')) return 'linkedin';
-    if (hostname.includes('indeed')) return 'indeed';
-    if (hostname.includes('glassdoor')) return 'glassdoor';
-    return 'generic';
-  }
-
-  extractJobId() {
-    const url = new URL(window.location.href);
-    const pathParts = url.pathname.split('/');
-    return pathParts[pathParts.length - 1] || `job_${Date.now()}`;
-  }
-
-  findApplyButton() {
-    const selectors = [
-      '.jobs-apply-button',
-      '[data-control-name="jobdetails_topcard_inapply"]',
-      'button:contains("Easy Apply")',
-      'a:contains("Apply")'
-    ];
-
-    for (const selector of selectors) {
-      const button = document.querySelector(selector);
-      if (button) return button;
-    }
-    return null;
-  }
-
-  extractRequirements() {
-    // Brief implementation
-    const requirementElements = document.querySelectorAll('.job-details-preferences-list li');
-    return Array.from(requirementElements).map(el => el.textContent?.trim()).filter(Boolean);
-  }
-
-  extractSalary() {
-    // Brief implementation
-    const salaryEl = document.querySelector('[data-test="salary-range"]');
-    if (!salaryEl) return null;
-
-    const text = salaryEl.textContent || '';
-    const numbers = text.match(/[\d,]+/g);
-    if (numbers && numbers.length >= 2) {
-      return {
-        min: parseInt(numbers[0].replace(/,/g, '')),
-        max: parseInt(numbers[1].replace(/,/g, '')),
-        currency: 'USD'
-      };
-    }
-    return null;
-  }
-
-  onJobSiteDetected(data) {
-    // Update UI to show extension is active
-    this.showExtensionIndicator(data.platform);
-    
-    // Start monitoring for jobs
-    this.detectCurrentJob();
-  }
-
-  showExtensionIndicator(platform) {
-    if (document.querySelector('.jobscrapper-indicator')) return;
-
-    const indicator = document.createElement('div');
-    indicator.className = 'jobscrapper-indicator';
-    indicator.innerHTML = `
-      <div style="
-        position: fixed; 
-        top: 10px; 
-        right: 10px; 
-        background: #0073b1; 
-        color: white; 
-        padding: 8px 12px; 
-        border-radius: 4px; 
-        font-size: 12px;
-        z-index: 10000;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      ">
-        📋 JobScrapper Active (${platform})
-      </div>
-    `;
-    
-    document.body.appendChild(indicator);
-
-    // Remove after 3 seconds
-    setTimeout(() => {
-      indicator.remove();
-    }, 3000);
+    if (hostname.includes('linkedin.com')) return 'linkedin';
+    if (hostname.includes('indeed.com')) return 'indeed';
+    if (hostname.includes('glassdoor.com')) return 'glassdoor';
+    if (hostname.includes('monster.com')) return 'monster';
+    if (hostname.includes('ziprecruiter.com')) return 'ziprecruiter';
+    return 'unknown';
   }
 
   extractApplicationId() {
@@ -569,6 +726,25 @@ class ContentScriptManager {
     // Count filled form fields
     const fields = document.querySelectorAll('input[type="text"], input[type="email"], textarea, select');
     return Array.from(fields).filter(field => field.value?.trim()).length;
+  }
+
+  cleanup() {
+    console.log('🧹 Cleaning up content script resources...');
+    
+    // Clear intervals
+    if (this.memoryCheckInterval) {
+      memoryManager.intervals.delete(this.memoryCheckInterval);
+      clearInterval(this.memoryCheckInterval);
+    }
+    
+    // Clear DOM cache
+    this.domQueryCache.clear();
+    
+    // Clear application state
+    this.currentApplication = null;
+    
+    // Record cleanup
+    performanceMonitor.recordMetric('performance', 'content_script_cleanup', 1);
   }
 }
 
