@@ -31,23 +31,33 @@ A comprehensive Chrome extension with MERN stack backend for automated job scrap
 
 ```
 JobScrapper/
-├── extension/                 # Chrome Extension files
-│   ├── manifest.json         # Extension manifest
-│   ├── background.js         # Background service worker
-│   ├── content.js           # Content script
-│   ├── popup.html           # Extension popup UI
-│   ├── popup.js             # Popup JavaScript
-│   ├── popup.css            # Popup styles
+├── docs/                     # 📚 Complete Documentation
+│   ├── deployment/          # Deployment guides and configuration
+│   ├── extension/           # Chrome extension development docs
+│   ├── api/                 # Backend API documentation
+│   ├── database/            # Database schema and models
+│   ├── testing/             # Testing framework documentation
+│   └── README.md            # Documentation index
+├── extension/                # Chrome Extension files
+│   ├── manifest.json        # Extension manifest
+│   ├── src/                 # Extension source code
+│   │   ├── background/      # Service worker
+│   │   ├── content/         # Content scripts
+│   │   ├── popup/           # React popup interface
+│   │   └── utils/           # Utility modules
 │   └── icons/               # Extension icons
-├── backend/                  # Node.js backend
+├── backend/                  # Node.js backend API
 │   ├── models/              # MongoDB models
 │   ├── routes/              # API routes
 │   ├── middleware/          # Custom middleware
-│   ├── services/            # Business logic
 │   └── server.js            # Entry point
-├── frontend/                 # React dashboard
-│   ├── src/
-│   │   ├── components/      # React components
+├── scripts/                  # Deployment and utility scripts
+│   ├── deploy-*.js          # Deployment automation
+│   ├── db-*.js              # Database management
+│   └── package-extension.js # Chrome Web Store packaging
+├── tests/                    # Comprehensive test suite
+├── migrations/               # Database migrations
+└── .env.*                   # Environment configurations
 │   │   ├── pages/           # Page components
 │   │   ├── services/        # API services
 │   │   └── utils/           # Utility functions
@@ -165,6 +175,38 @@ npm run build:extension:watch
 - Professional details
 - Resume and cover letter templates
 - Custom question answers
+
+## 📚 Documentation
+
+Comprehensive documentation is available in the [`docs/`](./docs/) directory:
+
+### 🚀 **[Deployment Documentation](./docs/deployment/)**
+- **[Complete Deployment Guide](./docs/deployment/DEPLOYMENT_GUIDE.md)** - Step-by-step deployment instructions
+- **[Deployment Pipeline Summary](./docs/deployment/DEPLOYMENT_SUMMARY.md)** - Quick deployment overview
+
+### 🔧 **[Extension Documentation](./docs/extension/)**
+- **[Extension Development Guide](./docs/extension/EXTENSION_README.md)** - Chrome extension development
+- **[Service Worker Documentation](./docs/extension/SERVICE_WORKER_DOCUMENTATION.md)** - Background service worker
+- **[React Popup Documentation](./docs/extension/REACT_POPUP_DOCUMENTATION.md)** - User interface development
+- **[Stealth Implementation Guide](./docs/extension/STEALTH_IMPLEMENTATION_GUIDE.md)** - Stealth scraping techniques
+- **[Auto-Fill System Documentation](./docs/extension/AUTO_FILL_DOCUMENTATION.md)** - Form automation
+- **[Error Handling Documentation](./docs/extension/ERROR_HANDLING_DOCUMENTATION.md)** - Error management
+
+### 🌐 **[API Documentation](./docs/api/)**
+- **[API Routes Documentation](./docs/api/API_ROUTES_DOCUMENTATION.md)** - Complete API reference
+
+### 🗃️ **[Database Documentation](./docs/database/)**
+- **[Database Schema](./docs/database/SCHEMA_SUMMARY.md)** - MongoDB schema design
+- **[Models Documentation](./docs/database/MODELS_README.md)** - Mongoose models reference
+
+### 🧪 **[Testing Documentation](./docs/testing/)**
+- **[Testing Framework Guide](./docs/testing/TESTING_FRAMEWORK_DOCUMENTATION.md)** - Complete testing setup
+- **[Testing Summary](./docs/testing/TESTING_FRAMEWORK_SUMMARY.md)** - Testing overview
+
+**Quick Links:**
+- 📖 **[Full Documentation Index](./docs/README.md)** - Complete documentation overview
+- 🚀 **[Quick Start Guide](./docs/deployment/DEPLOYMENT_GUIDE.md#quick-start)** - Get started quickly
+- 🔧 **[Troubleshooting](./docs/deployment/DEPLOYMENT_GUIDE.md#troubleshooting)** - Common issues and solutions
 
 ## 📊 API Endpoints
 

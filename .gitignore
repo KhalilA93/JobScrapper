@@ -102,3 +102,12 @@ jspm_packages/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Keep documentation structure
+# docs/ folder and all documentation files should be tracked
+!docs/
+!docs/**/*.md
+
+# Keep migration files
+!migrations/
+!migrations/**/*.js
